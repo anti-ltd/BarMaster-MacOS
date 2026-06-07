@@ -63,29 +63,70 @@ struct ItemsTab: View {
 
     var body: some View {
         CardSection("Menu Bar Items") {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Running apps with menu bar items appear here.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                Text("Item discovery coming in v0.2.")
-                    .font(.callout)
-                    .foregroundStyle(.tertiary)
-            }
-        }
-        let hidden: [String] = model.hiddenBundleIDs.sorted()
-        if !hidden.isEmpty {
-            CardSection("Hidden") {
-                ForEach(hidden, id: \.self) { (id: String) in
-                    HStack {
-                        Text(id).font(.callout.monospaced())
-                        Spacer()
-                        Button("Show") { model.show(bundleID: id) }
-                            .buttonStyle(.plain)
-                            .foregroundStyle(Color.accentColor)
+            if model.discoveredItems.isEmpty {
+                HStack {
+                    Text(model.isScanning ? "Scanning…" : "No items found.")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if !model.isScanning {
+                        Button("Scan") { model.scanItems() }
                     }
+                }
+            } else {
+                ForEach(model.discoveredItems) { (item: MenuBarItem) in
+                    MenuBarItemRow(item: item, model: model)
+                }
+                HStack {
+                    Spacer()
+                    Button(model.isScanning ? "Scanning…" : "Refresh") {
+                        model.scanItems()
+                    }
+                    .disabled(model.isScanning)
+                    .font(.callout)
                 }
             }
         }
+        .onAppear {
+            if model.discoveredItems.isEmpty { model.scanItems() }
+        }
+    }
+}
+
+struct MenuBarItemRow: View {
+    let item: MenuBarItem
+    @Bindable var model: BarMasterModel
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if let icon = item.icon {
+                Image(nsImage: icon)
+                    .resizable()
+                    .frame(width: 16, height: 16)
+            } else {
+                Image(systemName: "app.dashed")
+                    .frame(width: 16, height: 16)
+                    .foregroundStyle(.secondary)
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(item.appName).font(.callout)
+                if let bid = item.bundleID {
+                    Text(bid).font(.caption).foregroundStyle(.tertiary)
+                }
+            }
+            Spacer()
+            if item.isHideable {
+                Toggle("", isOn: Binding(
+                    get: { !model.isHidden(item) },
+                    set: { _ in model.toggle(item) }
+                ))
+                .toggleStyle(.switch)
+                .labelsHidden()
+                .controlSize(.small)
+            } else {
+                Text("System").font(.caption).foregroundStyle(.tertiary)
+            }
+        }
+        .opacity(item.isHideable ? 1 : 0.5)
     }
 }
 

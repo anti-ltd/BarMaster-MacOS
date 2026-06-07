@@ -4,17 +4,19 @@ import SwiftUI
 @Observable
 public final class BarMasterModel {
 
-    /// Whether BarMaster is actively managing the menu bar.
     public var isEnabled: Bool {
         didSet { UserDefaults.standard.set(isEnabled, forKey: "isEnabled") }
     }
 
-    /// Bundle IDs whose menu bar items are hidden.
     public var hiddenBundleIDs: Set<String> {
         didSet {
             UserDefaults.standard.set(Array(hiddenBundleIDs), forKey: "hiddenBundleIDs")
         }
     }
+
+    /// Live menu bar items discovered by the last scan.
+    public var discoveredItems: [MenuBarItem] = []
+    public var isScanning = false
 
     public init() {
         isEnabled = UserDefaults.standard.object(forKey: "isEnabled") as? Bool ?? true
@@ -25,7 +27,13 @@ public final class BarMasterModel {
     public var isMuted: Bool { !isEnabled }
 
     public func start() {
-        // Wire up NSStatusItem observer and apply stored hidden state.
+        scanItems()
+    }
+
+    public func scanItems() {
+        isScanning = true
+        discoveredItems = MenuBarScanner.scan()
+        isScanning = false
     }
 
     public func hide(bundleID: String) {
@@ -36,8 +44,14 @@ public final class BarMasterModel {
         hiddenBundleIDs.remove(bundleID)
     }
 
-    public func toggle(bundleID: String) {
-        if hiddenBundleIDs.contains(bundleID) { show(bundleID: bundleID) }
-        else { hide(bundleID: bundleID) }
+    public func isHidden(_ item: MenuBarItem) -> Bool {
+        guard let bid = item.bundleID else { return false }
+        return hiddenBundleIDs.contains(bid)
+    }
+
+    public func toggle(_ item: MenuBarItem) {
+        guard let bid = item.bundleID else { return }
+        if hiddenBundleIDs.contains(bid) { hiddenBundleIDs.remove(bid) }
+        else { hiddenBundleIDs.insert(bid) }
     }
 }
