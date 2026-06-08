@@ -24,6 +24,8 @@ struct BarMasterApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let module = BarMasterModule()
     private var menuBar: MenuBarController?
+    private var spacer: SpacerManager?
+    private var spike: SpikeController?
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
@@ -37,6 +39,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        // Single instance: a new launch wins — kill any already-running copies so
+        // we never leave duplicate menu bar icons behind.
+        Self.killOtherInstances()
+
+        // STAGE 0 spike — throwaway. See SpikeController.swift.
+        if args.contains("--spike") {
+            NSApp.setActivationPolicy(.regular)
+            let s = SpikeController()
+            s.start()
+            spike = s
+            return
+        }
+
         menuBar = MenuBarController(
             symbolName: BarMasterModule.symbolName,
             accessibilityLabel: BarMasterModule.displayName,
@@ -45,6 +60,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             clickStyle: .leftClickMenu,
             menuProvider: { [weak self] in self?.contextMenu() }
         )
+        // The hide/reveal divider + chevron (proven in Stage 0).
+        spacer = SpacerManager(secondaryAction: { BarMasterWindowOpener.open() })
         module.start()
 
         let id = BarMasterModule.windowID
@@ -52,6 +69,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             for window in NSApp.windows where window.identifier?.rawValue.contains(id) == true {
                 window.close()
             }
+        }
+    }
+
+    // Terminate every other running copy of this binary (matched by bundle ID
+    // and by executable path so it works for both the .app and the dev binary).
+    private static func killOtherInstances() {
+        let mePID = NSRunningApplication.current.processIdentifier
+        let myBID = Bundle.main.bundleIdentifier
+        let myExec = Bundle.main.executableURL?.resolvingSymlinksInPath()
+        for app in NSWorkspace.shared.runningApplications {
+            guard app.processIdentifier != mePID else { continue }
+            let sameBID  = myBID != nil && app.bundleIdentifier == myBID
+            let sameExec = myExec != nil && app.executableURL?.resolvingSymlinksInPath() == myExec
+            if sameBID || sameExec { app.forceTerminate() }
         }
     }
 
