@@ -52,6 +52,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        StatusItemVisibilityCleanup.clearBarMasterOverrides()
+
         menuBar = MenuBarController(
             symbolName: BarMasterModule.symbolName,
             accessibilityLabel: BarMasterModule.displayName,
@@ -60,9 +62,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             clickStyle: .leftClickMenu,
             menuProvider: { [weak self] in self?.contextMenu() }
         )
-        // The hide/reveal divider + chevron (proven in Stage 0).
+        // Hide/reveal divider + chevron (macOS 26 and earlier only).
         spacer = SpacerManager(secondaryAction: { BarMasterWindowOpener.open() })
         module.start()
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            guard let item = self?.menuBar?.statusItemForGuidance() else { return }
+            MenuBarAllowListGuidance.presentIfNeeded(for: item, appName: BarMasterModule.displayName)
+        }
 
         let id = BarMasterModule.windowID
         DispatchQueue.main.async {

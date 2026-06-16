@@ -22,4 +22,9 @@ public struct MenuBarItem: Identifiable {
         guard let bid = bundleID else { return false }
         return !Self.systemBundleIDs.contains(bid)
     }
+
+    /// A real third-party app the user can launch / bring to the front.
+    /// macOS 27 removed every way to hide another app's status item, so the
+    /// product surface is "jump to the app", not "hide its icon".
+    public var isLaunchable: Bool { isHideable }
 }

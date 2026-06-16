@@ -8,18 +8,17 @@ import CoreGraphics
 //
 // macOS 26+: third-party status items are hosted by Control Centre rather than
 // their originating process. A supplemental running-apps pass recovers those apps.
+// macOS 27+: the bar is a single Window Server surface — CGWindowList no longer
+// reports per-item windows, so we skip straight to the running-apps inference.
 @MainActor
 public enum MenuBarScanner {
 
     public static func scan() -> [MenuBarItem] {
-        // NSStatusBar.system.thickness is unreliable on macOS 26+ (returns legacy
-        // value while actual windows are taller). Derive the true height from
-        // screen geometry: the gap between the full frame and the visible frame.
-        let menuBarHeight: CGFloat = {
-            guard let screen = NSScreen.main else { return NSStatusBar.system.thickness }
-            let h = screen.frame.maxY - screen.visibleFrame.maxY
-            return h > 0 ? h : NSStatusBar.system.thickness
-        }()
+        if MenuBarCapabilities.usesUnifiedMenuBarWindow {
+            return inferFromRunningApps()
+        }
+
+        let menuBarHeight = MenuBarCapabilities.derivedMenuBarHeight()
         // Exclude full-width overlay windows (e.g. Window Server background bar).
         let screenWidth = NSScreen.main?.frame.width ?? CGFloat.greatestFiniteMagnitude
 

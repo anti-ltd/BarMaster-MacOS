@@ -34,14 +34,14 @@ enum PopoverTab: String, CaseIterable, Identifiable, SettingsTab {
     var title: String {
         switch self {
         case .general: return "General"
-        case .items:   return "Items"
+        case .items:   return "Apps"
         case .about:   return "About"
         }
     }
     var icon: String {
         switch self {
         case .general: return "slider.horizontal.3"
-        case .items:   return "menubar.rectangle"
+        case .items:   return "square.grid.2x2"
         case .about:   return "info.circle"
         }
     }
@@ -50,9 +50,25 @@ enum PopoverTab: String, CaseIterable, Identifiable, SettingsTab {
 struct GeneralTab: View {
     @Bindable var model: BarMasterModel
     var body: some View {
+        if let message = model.osLimitationMessage {
+            CardSection("macOS Menu Bar") {
+                Label {
+                    Text(message)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                }
+            }
+        }
+
         CardSection("General") {
             ToggleRow("Enable BarMaster",
-                      subtitle: "Manage and hide menu bar items.",
+                      subtitle: model.spacerHideSupported
+                          ? "Manage and hide menu bar items."
+                          : "List your menu-bar apps and jump to any of them in one click.",
                       isOn: $model.isEnabled)
         }
     }
@@ -62,10 +78,19 @@ struct ItemsTab: View {
     @Bindable var model: BarMasterModel
 
     var body: some View {
-        CardSection("Menu Bar Items") {
+        if !model.spacerHideSupported {
+            CardSection("Menu Bar Apps") {
+                Text("macOS no longer lets apps hide each other's menu bar icons. BarMaster lists your menu-bar apps here so you can jump straight to any of them.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+
+        CardSection("Apps") {
             if model.discoveredItems.isEmpty {
                 HStack {
-                    Text(model.isScanning ? "Scanning…" : "No items found.")
+                    Text(model.isScanning ? "Scanning…" : "No apps found.")
                         .foregroundStyle(.secondary)
                     Spacer()
                     if !model.isScanning {
@@ -74,7 +99,7 @@ struct ItemsTab: View {
                 }
             } else {
                 ForEach(model.discoveredItems) { (item: MenuBarItem) in
-                    MenuBarItemRow(item: item, model: model)
+                    MenuBarAppRow(item: item, model: model)
                 }
                 HStack {
                     Spacer()
@@ -92,41 +117,44 @@ struct ItemsTab: View {
     }
 }
 
-struct MenuBarItemRow: View {
+struct MenuBarAppRow: View {
     let item: MenuBarItem
     @Bindable var model: BarMasterModel
 
     var body: some View {
-        HStack(spacing: 8) {
-            if let icon = item.icon {
-                Image(nsImage: icon)
-                    .resizable()
-                    .frame(width: 16, height: 16)
-            } else {
-                Image(systemName: "app.dashed")
-                    .frame(width: 16, height: 16)
-                    .foregroundStyle(.secondary)
-            }
-            VStack(alignment: .leading, spacing: 1) {
-                Text(item.appName).font(.callout)
-                if let bid = item.bundleID {
-                    Text(bid).font(.caption).foregroundStyle(.tertiary)
+        Button {
+            model.activate(item)
+        } label: {
+            HStack(spacing: 8) {
+                if let icon = item.icon {
+                    Image(nsImage: icon)
+                        .resizable()
+                        .frame(width: 16, height: 16)
+                } else {
+                    Image(systemName: "app.dashed")
+                        .frame(width: 16, height: 16)
+                        .foregroundStyle(.secondary)
+                }
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(item.appName).font(.callout)
+                    if let bid = item.bundleID {
+                        Text(bid).font(.caption).foregroundStyle(.tertiary)
+                    }
+                }
+                Spacer()
+                if item.isLaunchable {
+                    Image(systemName: "arrow.up.forward.app")
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("System").font(.caption).foregroundStyle(.tertiary)
                 }
             }
-            Spacer()
-            if item.isHideable {
-                Toggle("", isOn: Binding(
-                    get: { !model.isHidden(item) },
-                    set: { _ in model.toggle(item) }
-                ))
-                .toggleStyle(.switch)
-                .labelsHidden()
-                .controlSize(.small)
-            } else {
-                Text("System").font(.caption).foregroundStyle(.tertiary)
-            }
+            .contentShape(Rectangle())
         }
-        .opacity(item.isHideable ? 1 : 0.5)
+        .buttonStyle(.plain)
+        .disabled(!item.isLaunchable)
+        .opacity(item.isLaunchable ? 1 : 0.5)
+        .help(item.isLaunchable ? "Bring \(item.appName) to the front" : "System item")
     }
 }
 

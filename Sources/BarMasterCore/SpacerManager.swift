@@ -1,9 +1,11 @@
 import AppKit
 
-// Owns BarMaster's two control status items and the hide/reveal mechanic.
+// Owns BarMaster's control status items and the hide/reveal mechanic.
 //
-// Mechanic: status items lay out right-to-left, so widening an item pushes
-// everything to its LEFT off the screen edge (hidden). Shrinking it reveals them.
+// Mechanic (macOS 26 and earlier): status items lay out right-to-left, so
+// widening an item pushes everything to its LEFT off the screen edge (hidden).
+// Shrinking it reveals them. macOS 27's unified menu bar breaks this — see
+// `MenuBarCapabilities.spacerHideSupported`.
 //
 // Two items, roles assigned by physical position every toggle: the RIGHTMOST is
 // always the clickable chevron, the leftmost is the visible "|" divider that
@@ -13,6 +15,8 @@ import AppKit
 // The user Cmd-drags the icons they want hidden to sit LEFT of the divider.
 @MainActor
 public final class SpacerManager: NSObject {
+
+    public let hideRevealSupported: Bool
 
     private var itemA: NSStatusItem?
     private var itemB: NSStatusItem?
@@ -33,12 +37,16 @@ public final class SpacerManager: NSObject {
 
     public init(secondaryAction: (@MainActor () -> Void)? = nil) {
         self.secondaryAction = secondaryAction
+        hideRevealSupported = MenuBarCapabilities.spacerHideSupported
         super.init()
+        StatusItemVisibilityCleanup.clearBarMasterOverrides()
         install()
     }
 
     private func install() {
         let bar = NSStatusBar.system
+        guard hideRevealSupported else { return }
+
         for (name, hold) in [("barmaster.itemA", { (i: NSStatusItem) in self.itemA = i }),
                              ("barmaster.itemB", { (i: NSStatusItem) in self.itemB = i })] {
             let item = bar.statusItem(withLength: shownLength)
@@ -75,13 +83,16 @@ public final class SpacerManager: NSObject {
             (event?.modifierFlags.contains(.control) ?? false)
         if isSecondary, let secondaryAction {
             secondaryAction()
-        } else {
+        } else if hideRevealSupported {
             toggle()
+        } else if let secondaryAction {
+            secondaryAction()
         }
     }
 
     /// Collapse ⇄ reveal the hidden section.
     public func toggle() {
+        guard hideRevealSupported else { return }
         collapsed.toggle()
         syncRoles()   // re-pick rightmost-as-chevron, then size the divider
     }

@@ -31,6 +31,10 @@ public final class BarMasterModel {
 
     public var isMuted: Bool { !isEnabled }
 
+    public var spacerHideSupported: Bool { MenuBarCapabilities.spacerHideSupported }
+
+    public var osLimitationMessage: String? { MenuBarCapabilities.limitationMessage }
+
     public func start() {
         scanItems()
     }
@@ -80,6 +84,32 @@ public final class BarMasterModel {
         } else {
             hiddenBundleIDs.insert(bid)
             applyHide(item)
+        }
+    }
+
+    /// Bring the app to the front, or launch it if it isn't running.
+    ///
+    /// This is BarMaster's primary action on macOS 27: the OS no longer lets a
+    /// third-party app hide or trigger another app's status item (Control Centre
+    /// hosts them and exposes no Accessibility children), so the most we can
+    /// offer is one-click access to the owning app.
+    public func activate(_ item: MenuBarItem) {
+        let apps = NSWorkspace.shared.runningApplications
+
+        if let app = apps.first(where: { $0.processIdentifier == item.pid })
+            ?? apps.first(where: { $0.bundleIdentifier == item.bundleID }) {
+            app.activate()
+            return
+        }
+
+        // Not running — relaunch from the resolved bundle URL.
+        if let bid = item.bundleID,
+           let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bid) {
+            NSWorkspace.shared.openApplication(at: url, configuration: .init()) { [weak self] _, _ in
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    Task { @MainActor in self?.scanItems() }
+                }
+            }
         }
     }
 
